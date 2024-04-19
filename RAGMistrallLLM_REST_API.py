@@ -7,9 +7,18 @@ from langchain.chains import RetrievalQA, ConversationalRetrievalChain
 from datasets import load_dataset
 from pydantic import BaseModel, constr
 import outlines
-import torch
+import torch 
 import json
 from flask import Flask, request, jsonify
+from enum import Enum
+
+class Environment(str, Enum):
+    Outdoors ="Outdoors"
+    Greenhouse = "Greenhouse"
+
+class Lightning(str, Enum):
+    Direct_sunlight = "Direct Sunlight"
+    Shade = "Shade"
 
 class Output(BaseModel):
   crop: str
@@ -17,12 +26,14 @@ class Output(BaseModel):
   humidity: int
   time_to_harvest: int
   soil_ph: float
+  environment: Environment
+  lightning: Lightning
 
 def __init__():
     global db
     global generator
 
-    dataset_name = "BotatoFontys/DataBank"
+    dataset_name = "BotatoFontys/DataBankV2"
 
     loader = HuggingFaceDatasetLoader(dataset_name)
 
@@ -47,50 +58,80 @@ def __init__():
 
     db = FAISS.from_documents(docs, embeddings)
 
-    model = outlines.models.transformers("TheBloke/Mistral-7B-Instruct-v0.2-GPTQ", device="cuda")
+    model = outlines.models.transformers("TheBloke/Llama-2-7B-Chat-GPTQ", device="cuda")
 
     generator = outlines.generate.json(model, Output)
 
 
 __init__()
 
+def reciprocal_rank_fusion(search_results_dict, k=60):
+    fused_scores = {}
+    print("Initial individual search result ranks:")
+    for query, doc_scores in search_results_dict.items():
+        print(f"For query '{query}': {doc_scores}")
+        
+    for query, doc_scores in search_results_dict.items():
+        for rank, (doc, score) in enumerate(sorted(doc_scores.items(), key=lambda x: x[1], reverse=True)):
+            if doc not in fused_scores:
+                fused_scores[doc] = 0
+            previous_score = fused_scores[doc]
+            fused_scores[doc] += 1 / (rank + k)
+            print(f"Updating score for {doc} from {previous_score} to {fused_scores[doc]} based on rank {rank} in query '{query}'")
+
+    reranked_results = {doc: score for doc, score in sorted(fused_scores.items(), key=lambda x: x[1], reverse=True)}
+    print("Final reranked results:", reranked_results)
+    return reranked_results
+
 app = Flask(__name__)
 
 @app.get("/inference")
 def inference():
+    all_results = {}
     docs = []
+    queries = []
     crop = request.args.get('crop')
 
-    question = "What is the best mean daily temperature (celcius), humidity and ph to grow " + crop + ". How many days or years does it take to harvest a " + crop + "?"
+    question = "What is the best mean daily temperature (celcius), humidity and ph to grow " + crop + ". How many days or years does it take to harvest a " + crop + "? What is the best environment to grow the crop in?"
 
-    searchDocs = db.similarity_search("What is the best mean daily temperature (celcius) to grow " + crop + "?", fetch_k=1, k=1)
-    
-    for doc in searchDocs:
-        docs.append(doc.page_content)
+    query = "What is the optimal mean daytime temperature (celcius) to grow " + crop + "?"
+    queries.append(query)
 
-    searchDocs = db.similarity_search("What is the best mean daily humidity level to grow " + crop + "?", fetch_k=1, k=1)
-    
-    for doc in searchDocs:
-        print(doc.page_content)
-        docs.append(doc.page_content)
+    query = "What is the optimal mean daily humidity level to grow " + crop + "?"
+    queries.append(query)
 
-    searchDocs = db.similarity_search("What is the best soil ph to grow " + crop + "?", fetch_k=1, k=1)
-    
-    for doc in searchDocs:
-        docs.append(doc.page_content)
+    query = "What is the optimal soil ph to grow " + crop + "?"
+    queries.append(query)
 
-    searchDocs = db.similarity_search("How many days or years does it take to harvest a " + crop + "?", fetch_k=1, k=1)
-    
-    for doc in searchDocs:
-        docs.append(doc.page_content)
+    query = "How many days or years does it take to harvest a " + crop + "?"
+    queries.append(query)
 
-    joined_docs = ". ".join(docs)
+    query = "What is the best environment to grow " + crop + "? Outdoors or Greenhouse?"
+    queries.append(query)
 
-    question = joined_docs + ". " + question
+    query = "What is the best lightning condition to grow " + crop + "? Direct sunlight or Shade?"
+    queries.append(query)
+
+    scores = {doc[0].page_content: doc[1]  for doc in docs}
+    final_revision = {doc: score for doc, score in sorted(scores.items(), key=lambda x: x[1], reverse=True)}
+
+    for query in queries:
+        searchDocs = db.similarity_search_with_score(query, fetch_k=1, k=1)
+        for doc in searchDocs:
+            docs.append(doc)
+
+        scores = {doc[0].page_content.encode().decode('unicode-escape'): doc[1]  for doc in docs}
+        final_revision = {doc: score for doc, score in sorted(scores.items(), key=lambda x: x[1], reverse=True)}
+
+        all_results[query] = final_revision
+
+    reranked_results = reciprocal_rank_fusion(all_results)
+
+    question = f"Based on these documents: {reranked_results}, answer the following question: {question}"
 
     print(question)
 
     dict = generator(question).__dict__
-
+    print(dict)
     return jsonify(dict)
    
