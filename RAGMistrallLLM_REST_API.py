@@ -58,7 +58,7 @@ def __init__():
 
     db = FAISS.from_documents(docs, embeddings)
 
-    model = outlines.models.transformers("TheBloke/Llama-2-7B-Chat-GPTQ", device="cuda")
+    model = outlines.models.transformers("google/gemma-1.1-2b-it", device="cuda")
 
     generator = outlines.generate.json(model, Output)
 
