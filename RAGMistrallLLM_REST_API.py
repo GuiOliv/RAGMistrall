@@ -7,24 +7,25 @@ from langchain.chains import RetrievalQA, ConversationalRetrievalChain
 from datasets import load_dataset
 from pydantic import BaseModel, constr
 import outlines
-import torch 
-import json
 from flask import Flask, request, jsonify
 from enum import Enum
-
+import gc
+CUDA_LAUNCH_BLOCKING=1
+TF_ENABLE_ONEDNN_OPTS=0
 class Environment(str, Enum):
     Outdoors ="Outdoors"
     Greenhouse = "Greenhouse"
+    Dont_know = "Dont know"
 
 class Lightning(str, Enum):
     Direct_sunlight = "Direct Sunlight"
     Shade = "Shade"
+    Dont_know = "Dont know"
 
 class Output(BaseModel):
   crop: str
   temperature: int
   humidity: int
-  time_to_harvest: int
   soil_ph: float
   environment: Environment
   lightning: Lightning
@@ -58,7 +59,7 @@ def __init__():
 
     db = FAISS.from_documents(docs, embeddings)
 
-    model = outlines.models.transformers("google/gemma-1.1-2b-it", device="cuda")
+    model = outlines.models.transformers("meta-llama/Llama-2-7b-chat-hf", device="auto")
 
     generator = outlines.generate.json(model, Output)
 
@@ -92,7 +93,7 @@ def inference():
     queries = []
     crop = request.args.get('crop')
 
-    question = "What is the best mean daily temperature (celcius), humidity and ph to grow " + crop + ". How many days or years does it take to harvest a " + crop + "? What is the best environment to grow the crop in?"
+    question = "What is the best mean daily temperature (celcius), humidity and ph to grow " + crop + ". What is the best environment to grow the crop in?"
 
     query = "What is the optimal mean daytime temperature (celcius) to grow " + crop + "?"
     queries.append(query)
@@ -101,9 +102,6 @@ def inference():
     queries.append(query)
 
     query = "What is the optimal soil ph to grow " + crop + "?"
-    queries.append(query)
-
-    query = "How many days or years does it take to harvest a " + crop + "?"
     queries.append(query)
 
     query = "What is the best environment to grow " + crop + "? Outdoors or Greenhouse?"
@@ -127,11 +125,12 @@ def inference():
 
     reranked_results = reciprocal_rank_fusion(all_results)
 
-    question = f"Based on these documents: {reranked_results}, answer the following question: {question}"
+    question = f"Based on these documents: {reranked_results}, answer the following question: {question}. If you don't know the answer, return that you dont know."
 
     print(question)
 
     dict = generator(question).__dict__
     print(dict)
+    gc.collect()
     return jsonify(dict)
    
