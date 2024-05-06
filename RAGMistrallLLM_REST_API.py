@@ -50,7 +50,7 @@ def __init__():
 
     db = FAISS.from_documents(docs, embeddings)
 
-    model = outlines.models.transformers("microsoft/Phi-3-mini-4k-instruct", device="auto", model_kwargs={"torch_dtype":"auto", "trust_remote_code":True})
+    model = outlines.models.transformers("microsoft/Phi-3-mini-128k-instruct", device="auto", model_kwargs={ "trust_remote_code":True, "attn_implementation":'eager'})
 
     generator = outlines.generate.json(model, Output)
 
@@ -79,12 +79,13 @@ app = Flask(__name__)
 
 @app.get("/inference")
 def inference():
+    gc.collect()
     all_results = {}
     docs = []
     queries = []
     crop = request.args.get('crop')
 
-    question = "What is the best mean daily temperature (celcius), humidity, brighness level and ph to grow " + crop + "?"
+    question = "What is the best mean daily temperature (celcius), humidity, brightness level and ph to grow " + crop + "?"
 
     query = "What is the optimal mean daytime temperature (celcius) to grow " + crop + "?"
     queries.append(query)
@@ -113,7 +114,7 @@ def inference():
 
     reranked_results = reciprocal_rank_fusion(all_results)
 
-    question = f"Based on these documents: {reranked_results}, answer the following question: {question}. If you don't know the answer, return 0."
+    question = f"Based on these documents: {reranked_results}, answer the following question: {question}."
 
     print(question)
 
