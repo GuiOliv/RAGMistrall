@@ -1,6 +1,7 @@
 from langchain.document_loaders import HuggingFaceDatasetLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.embeddings import HuggingFaceEmbeddings
+from transformers import AutoModelForCausalLM
 from langchain.vectorstores import FAISS
 from langchain import HuggingFacePipeline
 from langchain.chains import RetrievalQA, ConversationalRetrievalChain
@@ -12,23 +13,13 @@ from enum import Enum
 import gc
 CUDA_LAUNCH_BLOCKING=1
 TF_ENABLE_ONEDNN_OPTS=0
-class Environment(str, Enum):
-    Outdoors ="Outdoors"
-    Greenhouse = "Greenhouse"
-    Dont_know = "Dont know"
-
-class Lightning(str, Enum):
-    Direct_sunlight = "Direct Sunlight"
-    Shade = "Shade"
-    Dont_know = "Dont know"
 
 class Output(BaseModel):
   crop: str
   temperature: int
   humidity: int
   soil_ph: float
-  environment: Environment
-  lightning: Lightning
+  brightness: int
 
 def __init__():
     global db
@@ -59,7 +50,7 @@ def __init__():
 
     db = FAISS.from_documents(docs, embeddings)
 
-    model = outlines.models.transformers("meta-llama/Llama-2-7b-chat-hf", device="auto")
+    model = outlines.models.transformers("microsoft/Phi-3-mini-4k-instruct", device="auto", model_kwargs={"torch_dtype":"auto", "trust_remote_code":True})
 
     generator = outlines.generate.json(model, Output)
 
@@ -93,7 +84,7 @@ def inference():
     queries = []
     crop = request.args.get('crop')
 
-    question = "What is the best mean daily temperature (celcius), humidity and ph to grow " + crop + ". What is the best environment to grow the crop in?"
+    question = "What is the best mean daily temperature (celcius), humidity, brighness level and ph to grow " + crop + "?"
 
     query = "What is the optimal mean daytime temperature (celcius) to grow " + crop + "?"
     queries.append(query)
@@ -104,10 +95,7 @@ def inference():
     query = "What is the optimal soil ph to grow " + crop + "?"
     queries.append(query)
 
-    query = "What is the best environment to grow " + crop + "? Outdoors or Greenhouse?"
-    queries.append(query)
-
-    query = "What is the best lightning condition to grow " + crop + "? Direct sunlight or Shade?"
+    query = "What is the best brightness level to grow " + crop + "?"
     queries.append(query)
 
     scores = {doc[0].page_content: doc[1]  for doc in docs}
@@ -125,7 +113,7 @@ def inference():
 
     reranked_results = reciprocal_rank_fusion(all_results)
 
-    question = f"Based on these documents: {reranked_results}, answer the following question: {question}. If you don't know the answer, return that you dont know."
+    question = f"Based on these documents: {reranked_results}, answer the following question: {question}. If you don't know the answer, return 0."
 
     print(question)
 
