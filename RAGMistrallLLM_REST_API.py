@@ -9,14 +9,14 @@ from datasets import load_dataset
 from pydantic import BaseModel, constr
 import outlines
 from flask import Flask, request, jsonify
+import re
 from enum import Enum
 import gc
 CUDA_LAUNCH_BLOCKING=1
 TF_ENABLE_ONEDNN_OPTS=0
-
-
+count = 0
 conversation_history = [{ "role": "user",
-        "content": """You are a farming assistant trained by cool students from Open Learning. You will answer the questions people make about farming and you will always assume the environment is a greenhouse, unless specified otherwise. You will only answer questions about farming. Your name is Botato."""},
+        "content": """You are a farming assistant trained by cool students from Open Learning. You will answer the questions people make about farming and you will always assume the environment is a greenhouse, unless specified otherwise. Always try to answer the question, even if you're not sure of the answer. Your name is Botato."""},
         {"role" : "assistant", "content" : "Got it! I am a farming assistant!"}]
 
 class Output(BaseModel):
@@ -28,7 +28,7 @@ class Output(BaseModel):
 def __init__():
     global db
     global generator
-
+    
     dataset_name = "BotatoFontys/DataBankV2"
 
     loader = HuggingFaceDatasetLoader(dataset_name)
@@ -66,10 +66,10 @@ def __init__():
 
     global tokenizer
     
-    tokenizer = AutoTokenizer.from_pretrained("BotatoFontys/FinetunedModel", padding_side="left")
-    config = PeftConfig.from_pretrained("BotatoFontys/FinetunedModel")
-    model = AutoModelForCausalLM.from_pretrained("BotatoFontys/FinetunedModel")
-    model = PeftModel.from_pretrained(model, "BotatoFontys/FinetunedModel")
+    tokenizer = AutoTokenizer.from_pretrained("CitrusBoy/FinetunedModelV2.0", padding_side="left")
+    config = PeftConfig.from_pretrained("CitrusBoy/FinetunedModelV2.0")
+    model = AutoModelForCausalLM.from_pretrained("CitrusBoy/FinetunedModelV2.0", trust_remote_code=True)
+    model = PeftModel.from_pretrained(model, "CitrusBoy/FinetunedModelV2.0")
 
 
 __init__()
@@ -143,9 +143,11 @@ def create_chat():
     conversation_history = [{ "role": "user",
         "content": """You are a farming assistant trained by cool students from Open Learning. You will answer the questions people make about farming and you will always assume the environment is a greenhouse, unless specified otherwise. You will only answer questions about farming. Your name is Botato."""},
         {"role" : "assistant", "content" : "Got it! I am a farming assistant!"}]
+    
 
 @app.get("/chat")
 def chat():
+    global count
     gc.collect()
     input = request.args.get('message') 
 
@@ -159,10 +161,10 @@ def chat():
 
     output = model.generate(**model_inputs, max_new_tokens=500, do_sample=True, temperature=0.7)
 
-    response = tokenizer.decode(output[0], skip_special_tokens=False)[len(prompt) + 5:][:-5].strip()
-    
-    conversation_history.append({"role" : "assistant", "content" : response})
+    response = tokenizer.decode(output[0], skip_special_tokens=False)[len(prompt) - (count * 3):][:-7]
 
     print(response)
 
+    conversation_history.append({"role" : "assistant", "content" : response})
+    count = count + 1
     return jsonify(response), 200, {'Content-Type': 'application/json; charset=utf-8'}
