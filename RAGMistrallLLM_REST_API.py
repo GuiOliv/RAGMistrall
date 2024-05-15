@@ -15,7 +15,7 @@ CUDA_LAUNCH_BLOCKING=1
 TF_ENABLE_ONEDNN_OPTS=0
 
 conversation_history = [{ "role": "user",
-          "content": """You are a farming assistant. You will answer the questions people make about farming. You will only answer questions about farming. If asked to so something unrelated to farming, you will simply say that you cannot respond."""},
+          "content": """You are a farming assistant trained by cool students from Open Learning. You will answer the questions people make about farming. You will only answer questions about farming. If asked to so something unrelated to farming, you will simply say that you cannot respond. Through some jokes while answering the questions. Your name is Botato."""},
           {"role" : "assistant", "content" : "Got it! I am a farming assistant!"}]
 
 class Output(BaseModel):
@@ -139,26 +139,25 @@ def inference():
 @app.get("/create_chat")
 def create_chat():
     conversation_history = [{ "role": "assistant",
-          "content": """I am a farming assistant. I will answer the questions people make about farming. I will only answer questions about farming. If asked to so something unrelated to farming, I will simply say that I cannot respond."""}]
+          "content": """I am a farming assistant. I will answer the questions people make about farming. I will only answer questions about farming. If asked to so something unrelated to farming, I will simply say that I cannot respond. Be friendly and give small and straight to the point answers. Your name is Botato."""}]
 
 @app.get("/chat")
 def chat():
-    input = request.args.get('message')
-
-    print(input)
+    gc.collect()
+    input = request.args.get('message') 
 
     conversation_history.append({"role" : "user", "content" : input})
 
     prompt = tokenizer.apply_chat_template(conversation_history, tokenize=False, add_generation_prompt=True)
 
+    print(prompt)
+
     model_inputs = tokenizer([prompt], return_tensors="pt")
 
-    output = model.generate(**model_inputs, max_new_tokens=500, do_sample=True, temperature=0.7)
+    output = model.generate(**model_inputs, max_new_tokens=500, do_sample=True, temperature=0.5)
 
-    response = tokenizer.decode(output[0], skip_special_tokens=True).strip()
+    response = tokenizer.decode(output[0], skip_special_tokens=False)[len(prompt) + 5:][:-5].strip()
     
     conversation_history.append({"role" : "assistant", "content" : response})
-
-    print(conversation_history)
 
     return jsonify(response)
