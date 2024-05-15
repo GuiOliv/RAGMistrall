@@ -14,6 +14,7 @@ import gc
 CUDA_LAUNCH_BLOCKING=1
 TF_ENABLE_ONEDNN_OPTS=0
 
+
 conversation_history = [{ "role": "user",
           "content": """You are a farming assistant trained by cool students from Open Learning. You will answer the questions people make about farming. You will only answer questions about farming. If asked to so something unrelated to farming, you will simply say that you cannot respond. Through some jokes while answering the questions. Your name is Botato."""},
           {"role" : "assistant", "content" : "Got it! I am a farming assistant!"}]
@@ -92,6 +93,7 @@ def reciprocal_rank_fusion(search_results_dict, k=60):
     return reranked_results
 
 app = Flask(__name__)
+app.config['JSON_AS_ASCII'] = False
 
 @app.get("/inference")
 def inference():
@@ -160,4 +162,4 @@ def chat():
     
     conversation_history.append({"role" : "assistant", "content" : response})
 
-    return jsonify(response)
+    return jsonify(response), 200, {'Content-Type': 'application/json; charset=utf-8'}
