@@ -14,12 +14,15 @@ import gc
 CUDA_LAUNCH_BLOCKING=1
 TF_ENABLE_ONEDNN_OPTS=0
 
+conversation_history = [{ "role": "user",
+          "content": """You are a farming assistant. You will answer the questions people make about farming. You will only answer questions about farming. If asked to so something unrelated to farming, you will simply say that you cannot respond."""},
+          {"role" : "assistant", "content" : "Got it! I am a farming assistant!"}]
+
 class Output(BaseModel):
   crop: str
   temperature: int
   humidity: int
   soil_ph: float
-  brightness: int
 
 def __init__():
     global db
@@ -32,7 +35,7 @@ def __init__():
     # Load the data
     data = loader.load()
 
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=700, chunk_overlap=500)
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=500)
 
     docs = text_splitter.split_documents(data)
 
@@ -50,9 +53,22 @@ def __init__():
 
     db = FAISS.from_documents(docs, embeddings)
 
-    model = outlines.models.transformers("microsoft/Phi-3-mini-128k-instruct", device="auto", model_kwargs={ "trust_remote_code":True, "attn_implementation":'eager'})
+    global model
+
+    model = outlines.models.transformers("microsoft/phi-1_5", device="auto", model_kwargs={ "trust_remote_code":True})
 
     generator = outlines.generate.json(model, Output)
+
+    from peft import PeftModel, PeftConfig
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+
+    global tokenizer
+    
+    tokenizer = AutoTokenizer.from_pretrained("BotatoFontys/FinetunedModel", padding_side="left")
+    config = PeftConfig.from_pretrained("BotatoFontys/FinetunedModel")
+    model = AutoModelForCausalLM.from_pretrained("BotatoFontys/FinetunedModel")
+    model = PeftModel.from_pretrained(model, "BotatoFontys/FinetunedModel")
 
 
 __init__()
@@ -85,7 +101,7 @@ def inference():
     queries = []
     crop = request.args.get('crop')
 
-    question = "What is the best mean daily temperature (celcius), humidity, brightness level and ph to grow " + crop + "?"
+    question = "What is the best mean daily temperature (celcius), humidity and ph to grow " + crop + "?"
 
     query = "What is the optimal mean daytime temperature (celcius) to grow " + crop + "?"
     queries.append(query)
@@ -94,9 +110,6 @@ def inference():
     queries.append(query)
 
     query = "What is the optimal soil ph to grow " + crop + "?"
-    queries.append(query)
-
-    query = "What is the best brightness level to grow " + crop + "?"
     queries.append(query)
 
     scores = {doc[0].page_content: doc[1]  for doc in docs}
@@ -123,3 +136,29 @@ def inference():
     gc.collect()
     return jsonify(dict)
    
+@app.get("/create_chat")
+def create_chat():
+    conversation_history = [{ "role": "assistant",
+          "content": """I am a farming assistant. I will answer the questions people make about farming. I will only answer questions about farming. If asked to so something unrelated to farming, I will simply say that I cannot respond."""}]
+
+@app.get("/chat")
+def chat():
+    input = request.args.get('message')
+
+    print(input)
+
+    conversation_history.append({"role" : "user", "content" : input})
+
+    prompt = tokenizer.apply_chat_template(conversation_history, tokenize=False, add_generation_prompt=True)
+
+    model_inputs = tokenizer([prompt], return_tensors="pt")
+
+    output = model.generate(**model_inputs, max_new_tokens=500, do_sample=True, temperature=0.7)
+
+    response = tokenizer.decode(output[0], skip_special_tokens=True).strip()
+    
+    conversation_history.append({"role" : "assistant", "content" : response})
+
+    print(conversation_history)
+
+    return jsonify(response)
