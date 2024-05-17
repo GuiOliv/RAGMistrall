@@ -5,23 +5,17 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python Debugger: Flask",
+            "name": "Python Debugger: FastAPI",
             "type": "debugpy",
             "request": "launch",
-            "module": "flask",
-            "env": {
-                "FLASK_APP": "RAGMistrallLLM_REST_API.py",
-                "FLASK_DEBUG": "1"
-            },
+            "module": "uvicorn",
             "args": [
-                "run",
-                "--no-debugger",
-                "--no-reload",
+                "RAGMistrallLLM_REST_API:app",
+                "--reload",
                 "--host=0.0.0.0",
-                "-p 5001"
+                "--port=5001"
             ],
-            "jinja": true,
-            "autoStartBrowser": false
+            "jinja": true
         }
     ]
 }

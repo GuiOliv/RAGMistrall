@@ -8,10 +8,12 @@ from langchain.chains import RetrievalQA, ConversationalRetrievalChain
 from datasets import load_dataset
 from pydantic import BaseModel, constr
 import outlines
-from flask import Flask, request, jsonify
+from flask import request, jsonify
+from fastapi import FastAPI
 import re
 from enum import Enum
 import gc
+import uvicorn
 CUDA_LAUNCH_BLOCKING=1
 TF_ENABLE_ONEDNN_OPTS=0
 count = 0
@@ -92,16 +94,17 @@ def reciprocal_rank_fusion(search_results_dict, k=60):
     print("Final reranked results:", reranked_results)
     return reranked_results
 
-app = Flask(__name__)
-app.config['JSON_AS_ASCII'] = False
+app = FastAPI()
 
-@app.get("/inference")
-def inference():
+if __name__ == "__main__":
+    uvicorn.run(app)
+
+@app.get("/inference/{crop}")
+async def inference(crop : str):
     gc.collect()
     all_results = {}
     docs = []
     queries = []
-    crop = request.args.get('crop')
 
     question = "What is the best mean daily temperature (celcius), humidity and ph to grow " + crop + "?"
 
@@ -136,22 +139,26 @@ def inference():
     dict = generator(question).__dict__
     print(dict)
     gc.collect()
-    return jsonify(dict)
+    return {"response" : dict}
    
 @app.get("/create_chat")
 def create_chat():
+    global conversation_history
+    global count
     conversation_history = [{ "role": "user",
         "content": """You are a farming assistant trained by cool students from Open Learning. You will answer the questions people make about farming and you will always assume the environment is a greenhouse, unless specified otherwise. You will only answer questions about farming. Your name is Botato."""},
         {"role" : "assistant", "content" : "Got it! I am a farming assistant!"}]
     
     count = 0
+
+    return {"response" : "Ok"}
     
 
-@app.get("/chat")
-def chat():
+@app.get("/chat/{message}")
+async def chat(message : str):
     global count
     gc.collect()
-    input = request.args.get('message') 
+    input = message
 
     conversation_history.append({"role" : "user", "content" : input})
 
@@ -169,4 +176,4 @@ def chat():
 
     conversation_history.append({"role" : "assistant", "content" : response})
     count = count + 1
-    return jsonify(response), 200, {'Content-Type': 'application/json; charset=utf-8'}
+    return {"response" : response}
