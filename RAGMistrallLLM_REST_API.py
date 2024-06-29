@@ -137,9 +137,12 @@ def inference():
     print(dict)
     gc.collect()
     return jsonify(dict)
+
    
 @app.get("/create_chat")
 def create_chat():
+    global count
+    global conversation_history
     conversation_history = [{ "role": "user",
         "content": """You are a farming assistant trained by cool students from Open Learning. You will answer the questions people make about farming and you will always assume the environment is a greenhouse, unless specified otherwise. You will only answer questions about farming. Your name is Botato."""},
         {"role" : "assistant", "content" : "Got it! I am a farming assistant!"}]
