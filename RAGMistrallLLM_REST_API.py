@@ -151,7 +151,7 @@ async def inference(crop : str):
     dict = generator(question).__dict__
     print(dict)
     gc.collect()
-    return {"response" : dict}
+    return jsonify(dict)
    
 @app.post("/json_from_chat_history/")
 def json_from_chat_history(chat_history : List[ConversationEntry]):
@@ -175,8 +175,6 @@ def json_from_chat_history(chat_history : List[ConversationEntry]):
 
 @app.get("/create_chat")
 def create_chat():
-    global conversation_history
-    global count
     conversation_history = [{ "role": "user",
         "content": """You are a farming assistant trained by cool students from Open Learning. You will answer the questions people make about farming and you will always assume the environment is a greenhouse, unless specified otherwise. Always return temperature valeus in Celcius and NEVER include fahrenheit and always try to answer the question, even if you're not sure of the answer. Your name is Botato."""},
         {"role" : "assistant", "content" : "Got it! I am a farming assistant!"}]
